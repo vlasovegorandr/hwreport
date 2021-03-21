@@ -6,7 +6,7 @@ import csv
 import re
 
 def ping(host):
-    # Возвращает True, если до хоста доходят пинги
+    ''' Возвращает True, если до хоста доходят пинги '''
     command = ['ping', '/n', '2', '/w', '2000', host]
     detached_process_flag = 8
     return subprocess.call(command, creationflags=detached_process_flag) == 0   
@@ -14,7 +14,7 @@ def ping(host):
 def delete_software_info(hwreport_file_path):
     ''' Оставляет в репорте только инфу об аппаратной части ПК '''
     software_info_start_line = '[Software Environment]'
-    hardwareonly_dir = Path('C:/Temp/MsInfo32Reports/hardware_only_reports')
+    hardwareonly_dir = Path(__file__).parent.joinpath('MsInfo32Reports/hardware_only_reports')
     hardwareonly_dir.mkdir(parents=True, exist_ok=True)
     with open(hwreport_file_path, 'r', encoding='utf-16') as file:
         hardwareonly_file_path = Path.joinpath(hardwareonly_dir, hwreport_file_path.name.split('.')[0]+'_hardware_report.txt')
@@ -79,14 +79,14 @@ def parse_file(file_name):
                     if line.startswith('Size '):
                         for match in re.findall(r'(\d+[\,\.]\d{2}\s\w{2})', line):
                             disk_sizes.append(match)
-                    hardware_info['Модель диска'] = disk_models
-                    hardware_info['Размер диска'] = disk_sizes 
+                    hardware_info['Модель диска'] = ', '.join(disk_models)
+                    hardware_info['Размер диска'] = ', '.join(disk_sizes)
                 if category.startswith('[Диски]'):
                     # в рус локализации drives и disks оба переведены как "диски", пришлось выкручиваться
                     if not ru_disk_first_category_passed:                        
                         ru_disk_first_category_passed = True
                         break
-                    if line.startswith('Модель '):
+                    if line.startswith('Модель '):                        
                         disk_models.append(line.replace('Модель ', '').strip())                        
                     if line.startswith('Размер '):
                         try:
@@ -96,11 +96,23 @@ def parse_file(file_name):
                                     disk_sizes.append(match)                            
                         except TypeError:                            
                             continue
-                    hardware_info['Модель диска'] = disk_models
-                    hardware_info['Размер диска'] = disk_sizes                   
-                    
-    parsed_info_dir = Path('C:/Temp/MsInfo32Reports/hardware_only_reports/summary')
-    print(parsed_info_dir)
+                    hardware_info['Модель диска'] = ', '.join(disk_models)
+                    hardware_info['Размер диска'] = ', '.join(disk_sizes)
+    
+    return hardware_info
+
+def get_csv_summary(hardware_info):
+    parsed_info_dir = Path(__file__).parent.joinpath('MsInfo32Reports/hardware_only_reports/summary')
+    parsed_info_dir.mkdir(parents=True, exist_ok=True)
+    summary_file = parsed_info_dir.joinpath('summary.csv')
+    with open(summary_file, 'a', newline='') as csv_file:
+        csv_writer = csv.writer(csv_file)
+        if csv_file.tell() == 0:
+            csv_writer.writerow(hardware_info.keys())
+        csv_writer.writerow(hardware_info.values())
+
+def get_txt_summary(hardware_info):
+    parsed_info_dir = Path(__file__).parent.joinpath('MsInfo32Reports/hardware_only_reports/summary')
     parsed_info_dir.mkdir(parents=True, exist_ok=True)
     summary_file = parsed_info_dir.joinpath('summary.txt')
     with open(summary_file, 'a') as file:
@@ -108,73 +120,40 @@ def parse_file(file_name):
             if type(item) is list:
                 item = ', '.join(item)
             file.write(key+': '+item+'\n')
-        file.write('\n')
-    
-    return summary_file
-
-def fill_csv(file_name):
-    computer_info = []
-    with open(filename, 'r') as file:
-        lines = file.read()
-        computers = lines.split('\n\n')
-        for line in computers:
-            computer_info.append(list(line.replace('\t', ' ').split('\n')))
-        computer_info_file = open('parsed.csv', 'w', newline='')
-        output_writer = csv.writer(computer_info_file)
-        for line in computer_info:
-            newline = []
-            for row in line:
-                if row.startswith('System Name'):
-                    row = row.replace('System Name ', '')
-                if row.startswith('Processor'):
-                    row = row.replace('Processor ', '')
-                if row.startswith('BaseBoard Manufacturer'):
-                    row = row.replace('BaseBoard Manufacturer ', '')
-                if row.startswith('BaseBoard Product'):
-                    row = row.replace('BaseBoard Product ', '')
-                if row.startswith('BaseBoard Product'):
-                    row = row.replace('BaseBoard Product ', '')            
-                if row.startswith('Total Physical Memory'):
-                    row = row.replace('Total Physical Memory ', '')
-                if row.startswith('Adapter Description'):
-                    row = row.replace('Adapter Description ', '')
-                if row.startswith('Model'):
-                    row = row.replace('Model ', '')
-                if row.startswith('Partition Size'):
-                    row = row.replace('Partition Size ', '')
-                newline.append(row)                
-            output_writer.writerow(newline)
+        file.write('\n')       
             
 def create_reports():
-    hwreports_dir = Path('C:/Temp/MsInfo32Reports')
-    hwreports_dir.mkdir(parents=True, exist_ok=True)          
-    with open('computer_names.txt', 'r') as file:
-        for computer_name in file:
-            computer_name = computer_name.lower().strip('\n ')
-            if not computer_name:
-                continue
-            report_path = hwreports_dir.joinpath(computer_name+".txt")
-            if ping(computer_name):
-                print(f'{time.strftime("%H:%M:%S")} - started getting info for {computer_name}...')
-                os.system(f'cmd /c "msinfo32 /computer {computer_name} /report {report_path}')
-                print(f'{time.strftime("%H:%M:%S")} - report completed for {computer_name}...')
-                hardware_only_file = delete_software_info(report_path)
-                print(f'{time.strftime("%H:%M:%S")} - hardware-only report created for {computer_name}...')
-                parse_file(hardware_only_file)
-                print(f'{time.strftime("%H:%M:%S")} - {computer_name} info added to summary...')
-                mark_computer_as_completed(computer_name)
-                print('\n')
-
-    #parse_hardware_info()
-    #print('new hw info added to file!')
+    hwreports_dir = Path(__file__).parent.joinpath('MsInfo32Reports')
+    hwreports_dir.mkdir(parents=True, exist_ok=True)
+    try:          
+        with open('computer_names.txt', 'r') as file:
+            for computer_name in file:
+                computer_name = computer_name.lower().strip('\n ')
+                if not computer_name:
+                    continue
+                report_path = hwreports_dir.joinpath(computer_name+".txt")
+                if ping(computer_name):
+                    print(f'{time.strftime("%H:%M:%S")} - started getting info for {computer_name}...')
+                    os.system(f'cmd /c "msinfo32 /computer {computer_name} /report {report_path}')
+                    print(f'{time.strftime("%H:%M:%S")} - report completed for {computer_name}...')
+                    hardware_only_file = delete_software_info(report_path)
+                    print(f'{time.strftime("%H:%M:%S")} - hardware-only report created for {computer_name}...')
+                    hardware_info = parse_file(hardware_only_file)
+                    get_txt_summary(hardware_info)
+                    get_csv_summary(hardware_info)
+                    print(f'{time.strftime("%H:%M:%S")} - {computer_name} info added to summary...')
+                    mark_computer_as_completed(computer_name)
+                    print('\n')
+    except FileNotFoundError:        
+        with open('computer_names.txt', 'w') as file:
+            file.write('Укажите доменные имена (или IP-адреса) компьютеров\n')
+            file.write('для сбора информации,\n')
+            file.write('один компьютер - одна строка.\n')
+            file.write('Пример:\n')
+            file.write('Компьютер 1\n')
+            file.write('Компьютер 2\n')
+            file.write('Компьютер 3\n')
+        print('\nФайл с именами компьютеров не найден, создали новый\n')
 
 if __name__ == '__main__':
-    #create_reports()
-    pf = parse_file('vlasov_hardwareonly.txt')
-    #pf1 = parse_file('agarkova.txt')
-    #for line in pf.items():
-    #    print(line)
-    #for line in pf1.items():
-    #    print(line)
-    #create_reports()
-    #fill_csv('parsed_info.txt')
+    create_reports()
