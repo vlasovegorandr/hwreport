@@ -11,6 +11,9 @@ def ping(host):
     detached_process_flag = 8
     return subprocess.call(command, creationflags=detached_process_flag) == 0   
 
+def create_msinfo32_report(computer_name, report_path):
+    os.system(f'cmd /c "msinfo32 /computer {computer_name} /report {report_path}')
+
 def delete_software_info(hwreport_file_path):
     ''' Оставляет в репорте только инфу об аппаратной части ПК '''
     software_info_start_line = '[Software Environment]'
@@ -24,16 +27,6 @@ def delete_software_info(hwreport_file_path):
                     break
                 hardware_only_file.write(line)
     return hardwareonly_file_path
-                
-def mark_computer_as_completed(computer_name):
-    with open('computer_names.txt', 'r') as file:
-        file_contents = file.readlines()
-    with open('computer_names.txt', 'w') as file:
-        for line in file_contents:
-            if computer_name not in line.lower():
-                file.write(line)
-    with open('completed_computers.txt', 'a') as file:
-        file.write(computer_name+'\n')
 
 def parse_file(file_name):
     hardware_info = dict.fromkeys(['Доменное имя пк', 'Процессор', 'Материнская плата', 'Оперативная память', 'Видеокарта', 'Модель диска', 'Размер диска'])
@@ -125,35 +118,54 @@ def get_txt_summary(hardware_info):
 def create_reports():
     hwreports_dir = Path(__file__).parent.joinpath('MsInfo32Reports')
     hwreports_dir.mkdir(parents=True, exist_ok=True)
-    try:          
-        with open('computer_names.txt', 'r') as file:
+    try:
+        print('\nВ результате работы программы создаются следующие папки:')
+        print('- MsInfo32Reports - содержит полные отчеты по компьютерам')
+        print('- MsInfo32Reports/hardware_only_reports - отчеты только по аппаратной части компьютеров')
+        print('- MsInfo32Reports/hardware_only_reports/summary - общие отчеты в txt и csv, содержащие данные о процессоре,')     
+        print('    материнке, оперативке, видеокарте и дисках всех компов')
+        input('---Нажмите Enter для продолжения---\n')
+        with open('computer_names.txt', 'r', encoding='utf-8') as file:
+            done_computers = []
+            failed_computers = []                        
             for computer_name in file:
                 computer_name = computer_name.lower().strip('\n ')
                 if not computer_name:
                     continue
                 report_path = hwreports_dir.joinpath(computer_name+".txt")
                 if ping(computer_name):
-                    print(f'{time.strftime("%H:%M:%S")} - started getting info for {computer_name}...')
-                    os.system(f'cmd /c "msinfo32 /computer {computer_name} /report {report_path}')
-                    print(f'{time.strftime("%H:%M:%S")} - report completed for {computer_name}...')
+                    print(f'{time.strftime("%H:%M:%S")} - начали собирать инфу по компьютеру {computer_name}...')
+                    create_msinfo32_report(computer_name, report_path)
+                    print(f'{time.strftime("%H:%M:%S")} - отчет создан по компьютеру {computer_name}...')
                     hardware_only_file = delete_software_info(report_path)
-                    print(f'{time.strftime("%H:%M:%S")} - hardware-only report created for {computer_name}...')
                     hardware_info = parse_file(hardware_only_file)
                     get_txt_summary(hardware_info)
                     get_csv_summary(hardware_info)
-                    print(f'{time.strftime("%H:%M:%S")} - {computer_name} info added to summary...')
-                    mark_computer_as_completed(computer_name)
+                    print(f'{time.strftime("%H:%M:%S")} - инфа по {computer_name} добавлена в общий отчет...')
+                    done_computers.append(computer_name)
                     print('\n')
+                else:
+                    failed_computers.append(computer_name)
+            print('---Итоги---')
+            if done_computers:
+                print('\nСобрали инфу по компьютерам:')
+                for computer_name in done_computers:
+                    print(' - '+computer_name)
+            if failed_computers:
+                print('\nНе удалось собрать инфу по компьютерам:')
+                for computer_name in failed_computers:
+                    print(' - '+computer_name)
     except FileNotFoundError:        
-        with open('computer_names.txt', 'w') as file:
-            file.write('Укажите доменные имена (или IP-адреса) компьютеров\n')
-            file.write('для сбора информации,\n')
-            file.write('один компьютер - одна строка.\n')
-            file.write('Пример:\n')
+        with open('computer_names.txt', 'w', encoding='utf-8') as file:
             file.write('Компьютер 1\n')
             file.write('Компьютер 2\n')
             file.write('Компьютер 3\n')
-        print('\nФайл с именами компьютеров не найден, создали новый\n')
+        print('\nФайл с именами компьютеров не найден, создали новый.\n')
+        print('Укажите в этом файле доменные имена (или IP-адреса) компьютеров')
+        print('  для сбора информации, один компьютер - одна строка.')
+        print('Все данные, кроме имен пк, нужно удалить из файла.')
+        print('После этого запустите программу еще раз')
+        input('---Нажмите Enter для продолжения---')
 
 if __name__ == '__main__':
     create_reports()
