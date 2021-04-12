@@ -112,7 +112,8 @@ def get_csv_summary(hardware_info, script_start_datetime):
         csv_writer = csv.writer(csv_file)
         if csv_file.tell() == 0:
             csv_writer.writerow(hardware_info.keys())
-        csv_writer.writerow(hardware_info.values())
+        hwinfo_values = [', '.join(item) if type(item) is list else item for item in hardware_info.values()]
+        csv_writer.writerow(hwinfo_values)
 
 def get_txt_summary(hardware_info, script_start_datetime):
     parsed_info_dir = Path(__file__).parent.joinpath('MsInfo32Reports/hardware_only_reports/summary')
