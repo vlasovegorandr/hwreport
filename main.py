@@ -50,7 +50,7 @@ def parse_file(file_name):
         baseboard_info = ''
         processor = ''
         ram = ''
-        videocard = ''
+        videocard_models = []
         disk_models = []
         disk_sizes = []
         ru_disk_first_category_passed = False
@@ -73,16 +73,16 @@ def parse_file(file_name):
                     hardware_info['Оперативная память'] = ram
                 if category.startswith(('[Display]', '[Дисплей]')):                    
                     if line.startswith(('Name ', 'Имя ')):
-                        videocard = line.replace('Name ', '').replace('Имя', '').strip()
-                    hardware_info['Видеокарта'] = videocard
+                        videocard_models.append(line.replace('Name ', '').replace('Имя', '').strip())
+                    hardware_info['Видеокарта'] = videocard_models
                 if category.startswith('[Disks]'):                    
                     if line.startswith('Model '):
                         disk_models.append(line.replace('Model ', '').strip())
                     if line.startswith('Size '):
                         for match in re.findall(r'(\d+[\,\.]\d{2}\s\w{2})', line):
                             disk_sizes.append(match)
-                    hardware_info['Модель диска'] = ', '.join(disk_models)
-                    hardware_info['Размер диска'] = ', '.join(disk_sizes)
+                    hardware_info['Модель диска'] = disk_models
+                    hardware_info['Размер диска'] = disk_sizes
                 if category.startswith('[Диски]'):
                     # в рус локализации drives и disks оба переведены как "диски", пришлось выкручиваться
                     if not ru_disk_first_category_passed:                        
@@ -98,8 +98,8 @@ def parse_file(file_name):
                                     disk_sizes.append(match)                            
                         except TypeError:                            
                             continue
-                    hardware_info['Модель диска'] = ', '.join(disk_models)
-                    hardware_info['Размер диска'] = ', '.join(disk_sizes)
+                    hardware_info['Модель диска'] = disk_models
+                    hardware_info['Размер диска'] = disk_sizes
     
     return hardware_info
 
