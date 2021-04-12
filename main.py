@@ -6,7 +6,7 @@ import csv
 import re
 
 def ping(host):
-    ''' Возвращает True, если до хоста доходят пинги '''
+    ''' Возвращает True, если хост отвечает на пинги '''
     command = ['ping', '/n', '2', '/w', '2000', host]
     detached_process_flag = 8
     return subprocess.call(command, creationflags=detached_process_flag) == 0   
@@ -94,20 +94,21 @@ def parse_file(file_name):
     
     return hardware_info
 
-def get_csv_summary(hardware_info):
+def get_csv_summary(hardware_info, script_start_daytime):
     parsed_info_dir = Path(__file__).parent.joinpath('MsInfo32Reports/hardware_only_reports/summary')
     parsed_info_dir.mkdir(parents=True, exist_ok=True)
-    summary_file = parsed_info_dir.joinpath('summary.csv')
+    # В имя файла вставлять дату
+    summary_file = parsed_info_dir.joinpath(f'summary-{script_start_datetime}.csv')
     with open(summary_file, 'a', newline='') as csv_file:
         csv_writer = csv.writer(csv_file)
         if csv_file.tell() == 0:
             csv_writer.writerow(hardware_info.keys())
         csv_writer.writerow(hardware_info.values())
 
-def get_txt_summary(hardware_info):
+def get_txt_summary(hardware_info, script_start_daytime):
     parsed_info_dir = Path(__file__).parent.joinpath('MsInfo32Reports/hardware_only_reports/summary')
     parsed_info_dir.mkdir(parents=True, exist_ok=True)
-    summary_file = parsed_info_dir.joinpath('summary.txt')
+    summary_file = parsed_info_dir.joinpath(f'summary-{script_start_datetime}.txt')
     with open(summary_file, 'a') as file:
         for key, item in hardware_info.items():
             if type(item) is list:
@@ -118,6 +119,7 @@ def get_txt_summary(hardware_info):
 def create_reports():
     hwreports_dir = Path(__file__).parent.joinpath('MsInfo32Reports')
     hwreports_dir.mkdir(parents=True, exist_ok=True)
+    script_start_datetime = time.strftime("%H_%M_%S-%d_%m_%y")
     try:
         print('\nВ результате работы программы создаются следующие папки:')
         print('- MsInfo32Reports - содержит полные отчеты по компьютерам')
@@ -139,8 +141,8 @@ def create_reports():
                     print(f'{time.strftime("%H:%M:%S")} - отчет создан по компьютеру {computer_name}...')
                     hardware_only_file = delete_software_info(report_path)
                     hardware_info = parse_file(hardware_only_file)
-                    get_txt_summary(hardware_info)
-                    get_csv_summary(hardware_info)
+                    get_txt_summary(hardware_info, script_start_daytime)
+                    get_csv_summary(hardware_info, script_start_daytime)
                     print(f'{time.strftime("%H:%M:%S")} - инфа по {computer_name} добавлена в общий отчет...')
                     done_computers.append(computer_name)
                     print('\n')
