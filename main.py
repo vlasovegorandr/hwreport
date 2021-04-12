@@ -7,6 +7,9 @@ import csv
 import re
 import logging
 from logging import StreamHandler, Formatter
+import argparse
+
+SCRIPT_START_DATETIME = time.strftime("%H_%M_%S-%d_%m_%y")
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -14,11 +17,28 @@ handler = StreamHandler(stream=sys.stdout)
 handler.setFormatter(Formatter('[%(asctime)s] %(message)s', '%H:%M:%S'))
 logger.addHandler(handler)
 
+parser = argparse.ArgumentParser(add_help = False, description='''Сбор информации по железу текущего компьютера, либо компьютеров, указанных в computer_names.txt\n   
+В результате работы программы создаются следующие папки:
+- MsInfo32Reports - содержит полные отчеты по компьютерам
+- MsInfo32Reports/hardware_only_reports - отчеты только по аппаратной части компьютеров
+- MsInfo32Reports/hardware_only_reports/summary - общие отчеты в txt и csv, содержащие данные о процессоре,
+    материнке, оперативке, видеокарте и дисках всех компов''', \
+    formatter_class=argparse.RawTextHelpFormatter)
+parser.add_argument('-h', '--help', action='help', help='Показать это сообщение и больше ничего не делать')
+parser.add_argument('-l', '--localhost_only', dest='localhost_only', action='store_true', default=False, help='Собирать информацию только по текущему компьютеру')
+
 def ping(host):
     ''' Возвращает True, если хост отвечает на пинги '''
     command = ['ping', '/n', '2', '/w', '2000', host]
     detached_process_flag = 8
     return subprocess.call(command, creationflags=detached_process_flag) == 0   
+
+def get_localhost_name():
+    return subprocess.check_output('hostname').decode('utf-8').strip()
+
+def check_if_only_local_report():
+    args = parser.parse_args()
+    return args.localhost_only
 
 def create_msinfo32_report(computer_name, report_path):
     os.system(f'cmd /c "msinfo32 /computer {computer_name} /report {report_path}')
@@ -103,11 +123,10 @@ def parse_file(file_name):
     
     return hardware_info
 
-def get_csv_summary(hardware_info, script_start_datetime):
+def add_info_to_csv_summary(hardware_info):
     parsed_info_dir = Path(__file__).parent.joinpath('MsInfo32Reports/hardware_only_reports/summary')
     parsed_info_dir.mkdir(parents=True, exist_ok=True)
-    # В имя файла вставлять дату
-    summary_file = parsed_info_dir.joinpath(f'summary-{script_start_datetime}.csv')
+    summary_file = parsed_info_dir.joinpath(f'summary-{SCRIPT_START_DATETIME}.csv')
     with open(summary_file, 'a', newline='') as csv_file:
         csv_writer = csv.writer(csv_file)
         if csv_file.tell() == 0:
@@ -115,10 +134,10 @@ def get_csv_summary(hardware_info, script_start_datetime):
         hwinfo_values = [', '.join(item) if type(item) is list else item for item in hardware_info.values()]
         csv_writer.writerow(hwinfo_values)
 
-def get_txt_summary(hardware_info, script_start_datetime):
+def add_info_to_txt_summary(hardware_info):
     parsed_info_dir = Path(__file__).parent.joinpath('MsInfo32Reports/hardware_only_reports/summary')
     parsed_info_dir.mkdir(parents=True, exist_ok=True)
-    summary_file = parsed_info_dir.joinpath(f'summary-{script_start_datetime}.txt')
+    summary_file = parsed_info_dir.joinpath(f'summary-{SCRIPT_START_DATETIME}.txt')
     with open(summary_file, 'a') as file:
         for key, item in hardware_info.items():
             if type(item) is list:
@@ -126,17 +145,29 @@ def get_txt_summary(hardware_info, script_start_datetime):
             file.write(key+': '+item+'\n')
         file.write('\n')       
             
-def create_reports():
+def add_computer_to_report(computer_name, report_path):
+    logger.info(f'начали собирать инфу по компьютеру {computer_name}...')
+    create_msinfo32_report(computer_name, report_path)
+    logger.info(f'отчет создан по компьютеру {computer_name}...')
+    hardware_only_file = delete_software_info(report_path)
+    hardware_info = parse_file(hardware_only_file)
+    add_info_to_csv_summary(hardware_info)
+    add_info_to_txt_summary(hardware_info)                    
+    logger.info(f'инфа по {computer_name} добавлена в общий отчет...')
+
+def create_reports(localhost_only=False):
     hwreports_dir = Path(__file__).parent.joinpath('MsInfo32Reports')
     hwreports_dir.mkdir(parents=True, exist_ok=True)
-    script_start_datetime = time.strftime("%H_%M_%S-%d_%m_%y")
-    try:
-        print('\nВ результате работы программы создаются следующие папки:')
-        print('- MsInfo32Reports - содержит полные отчеты по компьютерам')
-        print('- MsInfo32Reports/hardware_only_reports - отчеты только по аппаратной части компьютеров')
-        print('- MsInfo32Reports/hardware_only_reports/summary - общие отчеты в txt и csv, содержащие данные о процессоре,')     
-        print('    материнке, оперативке, видеокарте и дисках всех компов')
-        input('---Нажмите Enter для продолжения---\n')
+    get_report_path = lambda computer_name: hwreports_dir.joinpath(computer_name+".txt")
+    print('\nОписание скрипта можно получить, запустив его с флагом -h')
+    input('\n---Нажмите Enter, чтобы начать---\n')
+
+    if localhost_only:
+        computer_name = get_localhost_name()
+        add_computer_to_report(computer_name, get_report_path(computer_name))
+        return
+    
+    try:        
         with open('computer_names.txt', 'r', encoding='utf-8') as file:
             done_computers = []
             failed_computers = []                        
@@ -144,16 +175,9 @@ def create_reports():
                 computer_name = re.sub('[^\w\-]+', '', computer_name)
                 if not computer_name:
                     continue
-                report_path = hwreports_dir.joinpath(computer_name+".txt")
+                report_path = get_report_path(computer_name)
                 if ping(computer_name):
-                    logger.info(f'начали собирать инфу по компьютеру {computer_name}...')
-                    create_msinfo32_report(computer_name, report_path)
-                    logger.info(f'отчет создан по компьютеру {computer_name}...')
-                    hardware_only_file = delete_software_info(report_path)
-                    hardware_info = parse_file(hardware_only_file)
-                    get_txt_summary(hardware_info, script_start_datetime)
-                    get_csv_summary(hardware_info, script_start_datetime)                    
-                    logger.info(f'инфа по {computer_name} добавлена в общий отчет...')
+                    add_computer_to_report(computer_name, report_path)
                     done_computers.append(computer_name)
                     print('\n')
                 else:
@@ -179,5 +203,6 @@ def create_reports():
         print('После этого запустите программу еще раз')
         input('---Нажмите Enter для продолжения---')
 
-if __name__ == '__main__':
-    create_reports()
+if __name__ == '__main__':    
+    localhost_only = check_if_only_local_report()
+    create_reports(localhost_only)
