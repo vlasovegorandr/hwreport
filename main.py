@@ -141,7 +141,7 @@ def create_reports():
             done_computers = []
             failed_computers = []                        
             for computer_name in file:
-                computer_name = computer_name.lower().strip('\n ')
+                computer_name = re.sub('[^\w\-]+', '', computer_name)
                 if not computer_name:
                     continue
                 report_path = hwreports_dir.joinpath(computer_name+".txt")
