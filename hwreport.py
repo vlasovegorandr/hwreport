@@ -158,7 +158,10 @@ def add_computer_to_report(computer_name, report_path):
 def create_reports(localhost_only=False):
     hwreports_dir = Path(__file__).parent.joinpath('MsInfo32Reports')
     hwreports_dir.mkdir(parents=True, exist_ok=True)
-    get_report_path = lambda computer_name: hwreports_dir.joinpath(computer_name+".txt")
+    
+    def get_report_path(computer_name):
+        return hwreports_dir.joinpath(computer_name+".txt")
+    
     print('\nОписание скрипта можно получить, запустив его с флагом -h')
     input('\n---Нажмите Enter, чтобы начать---\n')
 
